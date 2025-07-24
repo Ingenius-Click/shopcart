@@ -1,0 +1,43 @@
+{
+    "name": "ingenius/shopcart",
+    "description": "Ingenius ShopCart Package",
+    "type": "library",
+    "license": "MIT",
+    "version": "0.0.1",
+    "authors": [
+        {
+            "name": "Ingenius Team",
+            "email": "info@ingeniusclick.com"
+        }
+    ],
+    "require": {
+        "php": "^8.2",
+        "ingenius/core": "*",
+        "ingenius/auth": "*"
+    },
+    "require-dev": {
+        "orchestra/testbench": "^9.0",
+        "phpunit/phpunit": "^11.0"
+    },
+    "autoload": {
+        "psr-4": {
+            "Ingenius\\ShopCart\\": "src/",
+            "Ingenius\\ShopCart\\Database\\Factories\\": "database/factories/",
+            "Ingenius\\ShopCart\\Database\\Seeders\\": "database/seeders/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Ingenius\\ShopCart\\Tests\\": "tests/"
+        }
+    },
+    "extra": {
+        "laravel": {
+            "providers": [
+                "Ingenius\\ShopCart\\Providers\\ShopCartServiceProvider"
+            ]
+        }
+    },
+    "minimum-stability": "stable",
+    "prefer-stable": true
+}
