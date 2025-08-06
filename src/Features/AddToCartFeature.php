@@ -13,7 +13,12 @@ class AddToCartFeature implements FeatureInterface
 
     public function getName(): string
     {
-        return 'Add to cart';
+        return __('Add to cart');
+    }
+
+    public function getGroup(): string
+    {
+        return __('Shopcart');
     }
 
     public function getPackage(): string

@@ -13,7 +13,12 @@ class RemoveFromCartFeature implements FeatureInterface
 
     public function getName(): string
     {
-        return 'Remove from cart';
+        return __('Remove from cart');
+    }
+
+    public function getGroup(): string
+    {
+        return __('Shopcart');
     }
 
     public function getPackage(): string
