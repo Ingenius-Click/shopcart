@@ -27,6 +27,9 @@ Route::middleware([
     Route::get('/cart', [ShopCartController::class, 'getShopCart'])
         ->name('shopcart.get.cart')
         ->middleware('tenant.has.feature:get-cart');
+    Route::get('/small-cart', [ShopCartController::class, 'smallShopCart'])
+        ->name('shopcart.get.cart.small')
+        ->middleware('tenant.has.feature:get-cart');
     Route::put('/cart/product/remove', [ShopCartController::class, 'removeCartItem'])
         ->name('shopcart.remove.product')
         ->middleware('tenant.has.feature:remove-from-cart');

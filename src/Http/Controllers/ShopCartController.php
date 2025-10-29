@@ -2,6 +2,7 @@
 
 namespace Ingenius\ShopCart\Http\Controllers;
 
+use Illuminate\Http\JsonResponse;
 use Ingenius\Core\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use Ingenius\ShopCart\Actions\AddCartItem;
@@ -59,6 +60,17 @@ class ShopCartController extends Controller
         return response()->json([
             'message' => 'Shop cart retrieved successfully',
             'data' => $shopCart->toArray()
+        ], 200);
+    }
+
+    public function smallShopCart(ShopCart $shopCart): JsonResponse
+    {
+        return response()->json([
+            'message' => 'Small shop cart retrieved successfully',
+            'data' => [
+                'total_items' => $shopCart->getCartItems()->count(),
+                'total_price' => $shopCart->calculateTotal(),
+            ]
         ], 200);
     }
 

@@ -49,7 +49,7 @@ class ShopCart implements Arrayable, Jsonable
         if ($user) {
             // If user is authenticated, load items by owner
             $query->where('owner_id', $user->id)
-                ->where('owner_type', get_class($user));
+                ->where('owner_type', tenant_user_class());
         } else {
             // If user is not authenticated, load items by session ID
             $sessionId = Session::getId();
