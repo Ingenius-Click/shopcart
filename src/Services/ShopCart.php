@@ -5,10 +5,12 @@ namespace Ingenius\ShopCart\Services;
 use Illuminate\Contracts\Support\Arrayable;
 use Illuminate\Contracts\Support\Jsonable;
 use Illuminate\Support\Collection;
+use Ingenius\Core\Services\PackageHookManager;
 use Ingenius\ShopCart\Models\CartItem;
 use Illuminate\Support\Facades\Session;
 use Ingenius\Core\Interfaces\IPurchasable;
 use Ingenius\Auth\Helpers\AuthHelper;
+use Ingenius\ShopCart\Transformers\ProductShopCartResource;
 
 class ShopCart implements Arrayable, Jsonable
 {
@@ -26,6 +28,12 @@ class ShopCart implements Arrayable, Jsonable
      */
     protected CartModifierManager $modifierManager;
 
+    protected PackageHookManager $hookManager;
+
+    protected array $cartDiscounts = [];
+
+    protected array $cartExtraCharges = [];
+
     /**
      * Constructor that loads cart items
      */
@@ -34,6 +42,17 @@ class ShopCart implements Arrayable, Jsonable
         $this->modifierManager = $modifierManager;
         $this->cartItems = collect();
         $this->loadCartItems();
+        $this->hookManager = app(PackageHookManager::class);
+        $this->cartDiscounts = $this->hookManager->execute(
+            'cart.discounts.get',
+            [],
+            []
+        );
+        $this->cartExtraCharges = $this->hookManager->execute(
+            'cart.charges.extra.get',
+            [],
+            []
+        );
     }
 
     /**
@@ -68,7 +87,7 @@ class ShopCart implements Arrayable, Jsonable
                 );
             }
 
-            return $cartItem;
+            return new ProductShopCartResource($cartItem);
         });
     }
 
@@ -119,6 +138,11 @@ class ShopCart implements Arrayable, Jsonable
      */
     public function calculateBaseSubtotal(): float
     {
+        return $this->calculateSubtotal();
+    }
+
+    protected function calculateSubtotal(bool $withFinalPrice = false): float
+    {
         $subtotal = 0;
         foreach ($this->cartItems as $cartItem) {
             $productible = $cartItem->productible;
@@ -128,10 +152,23 @@ class ShopCart implements Arrayable, Jsonable
                 continue;
             }
 
-            $subtotal += $productible->getFinalPrice() * $cartItem->quantity;
+            $price = $withFinalPrice ? $productible->getFinalPrice() : $productible->sale_price;
+
+            $subtotal += $price * $cartItem->quantity;
         }
 
         return $subtotal;
+    }
+
+
+    public function calculateFinalSubtotal(): float {
+        $finalSubtotal = $this->calculateSubtotal(true);
+
+        $discounts = collect($this->cartDiscounts)->sum(function($modifier) {
+            return $modifier['amount_saved'] ?? 0;
+        });
+
+        return $finalSubtotal - $discounts;
     }
 
     /**
@@ -142,8 +179,13 @@ class ShopCart implements Arrayable, Jsonable
      */
     public function calculateTotal(): float
     {
-        $baseSubtotal = $this->calculateBaseSubtotal();
-        return $this->modifierManager->calculateFinalSubtotal($this, $baseSubtotal);
+        $subtotal = $this->calculateFinalSubtotal();
+
+        $extraCharges = collect($this->cartExtraCharges)->sum(function($charge) {
+            return $charge['amount'] ?? 0;
+        });
+
+        return $subtotal + $extraCharges;
     }
 
     /**
@@ -160,8 +202,10 @@ class ShopCart implements Arrayable, Jsonable
     {
         $baseArray = [
             'items' => $this->cartItems->toArray(),
-            'subtotal' => $this->calculateBaseSubtotal(),
+            'subtotal' => $this->calculateFinalSubtotal(),
             'total' => $this->calculateTotal(),
+            'cart_discounts' => $this->cartDiscounts,
+            'extra_charges' => $this->cartExtraCharges,
         ];
 
         // Run through all modifiers to extend the array
