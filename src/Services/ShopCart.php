@@ -30,9 +30,19 @@ class ShopCart implements Arrayable, Jsonable
 
     protected PackageHookManager $hookManager;
 
-    protected array $cartDiscounts = [];
+    protected ?array $cartDiscounts = null;
 
-    protected array $cartExtraCharges = [];
+    protected ?array $cartExtraCharges = null;
+
+    /**
+     * Flag to prevent infinite recursion when calculating discounts
+     */
+    protected static bool $isCalculatingDiscounts = false;
+
+    /**
+     * Flag to prevent infinite recursion when calculating extra charges
+     */
+    protected static bool $isCalculatingExtraCharges = false;
 
     /**
      * Constructor that loads cart items
@@ -43,16 +53,60 @@ class ShopCart implements Arrayable, Jsonable
         $this->cartItems = collect();
         $this->loadCartItems();
         $this->hookManager = app(PackageHookManager::class);
-        $this->cartDiscounts = $this->hookManager->execute(
-            'cart.discounts.get',
-            [],
-            []
-        );
-        $this->cartExtraCharges = $this->hookManager->execute(
-            'cart.charges.extra.get',
-            [],
-            []
-        );
+    }
+
+    /**
+     * Get cart discounts with lazy loading and recursion prevention
+     */
+    protected function getCartDiscounts(): array
+    {
+        if ($this->cartDiscounts !== null) {
+            return $this->cartDiscounts;
+        }
+
+        if (self::$isCalculatingDiscounts) {
+            return [];
+        }
+
+        self::$isCalculatingDiscounts = true;
+        try {
+            $this->cartDiscounts = $this->hookManager->execute(
+                'cart.discounts.get',
+                [],
+                []
+            );
+        } finally {
+            self::$isCalculatingDiscounts = false;
+        }
+
+        return $this->cartDiscounts;
+    }
+
+    /**
+     * Get cart extra charges with lazy loading and recursion prevention
+     */
+    protected function getCartExtraCharges(): array
+    {
+        if ($this->cartExtraCharges !== null) {
+            return $this->cartExtraCharges;
+        }
+
+        if (self::$isCalculatingExtraCharges) {
+            return [];
+        }
+
+        self::$isCalculatingExtraCharges = true;
+        try {
+            $this->cartExtraCharges = $this->hookManager->execute(
+                'cart.charges.extra.get',
+                [],
+                []
+            );
+        } finally {
+            self::$isCalculatingExtraCharges = false;
+        }
+
+        return $this->cartExtraCharges;
     }
 
     /**
@@ -141,6 +195,11 @@ class ShopCart implements Arrayable, Jsonable
         return $this->calculateSubtotal();
     }
 
+    public function calculateSubtotalWithNoCartDiscounts(): float
+    {
+        return $this->calculateSubtotal(true);
+    }
+
     protected function calculateSubtotal(bool $withFinalPrice = false): float
     {
         $subtotal = 0;
@@ -164,7 +223,7 @@ class ShopCart implements Arrayable, Jsonable
     public function calculateFinalSubtotal(): float {
         $finalSubtotal = $this->calculateSubtotal(true);
 
-        $discounts = collect($this->cartDiscounts)->sum(function($modifier) {
+        $discounts = collect($this->getCartDiscounts())->sum(function($modifier) {
             return $modifier['amount_saved'] ?? 0;
         });
 
@@ -181,7 +240,7 @@ class ShopCart implements Arrayable, Jsonable
     {
         $subtotal = $this->calculateFinalSubtotal();
 
-        $extraCharges = collect($this->cartExtraCharges)->sum(function($charge) {
+        $extraCharges = collect($this->getCartExtraCharges())->sum(function($charge) {
             return $charge['amount'] ?? 0;
         });
 
@@ -204,8 +263,8 @@ class ShopCart implements Arrayable, Jsonable
             'items' => $this->cartItems->toArray(),
             'subtotal' => $this->calculateFinalSubtotal(),
             'total' => $this->calculateTotal(),
-            'cart_discounts' => $this->cartDiscounts,
-            'extra_charges' => $this->cartExtraCharges,
+            'cart_discounts' => $this->getCartDiscounts(),
+            'extra_charges' => $this->getCartExtraCharges(),
         ];
 
         // Run through all modifiers to extend the array
@@ -215,5 +274,39 @@ class ShopCart implements Arrayable, Jsonable
     public function toJson($options = 0): string
     {
         return json_encode($this->toArray(), $options);
+    }
+
+    /**
+     * Get all discount information for order creation
+     * This collects both product-level and cart-level discounts
+     *
+     * @return array Contains 'product_discounts' and 'cart_discounts'
+     */
+    public function getDiscountsForOrder(): array
+    {
+        $productDiscounts = [];
+
+        foreach ($this->cartItems as $cartItem) {
+            $itemArray = $cartItem->toArray(request());
+
+            if (!empty($itemArray['applied_discounts']['discounts'])) {
+                foreach ($itemArray['applied_discounts']['discounts'] as $discount) {
+                    $productDiscounts[] = [
+                        'campaign_id' => $discount['campaign_id'],
+                        'campaign_name' => $discount['campaign_name'],
+                        'discount_type' => $discount['discount_type'],
+                        'amount_saved' => $discount['amount_saved'],
+                        'productible_id' => $cartItem->productible_id,
+                        'productible_type' => $cartItem->productible_type,
+                        'quantity' => $cartItem->quantity,
+                    ];
+                }
+            }
+        }
+
+        return [
+            'product_discounts' => $productDiscounts,
+            'cart_discounts' => $this->getCartDiscounts(),
+        ];
     }
 }

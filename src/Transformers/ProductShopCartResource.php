@@ -20,6 +20,7 @@ class ProductShopCartResource extends JsonResource
         $extraData = $hookManager->execute('product.cart.array.extend', [],  [
             'product_id' => $this->resource->productible->id,
             'product_class' => get_class($this->resource->productible),
+            'quantity' => $this->resource->quantity,
             'base_price' => $this->resource->productible->sale_price,
             'regular_price' => $this->resource->productible->getRegularPrice(),
         ]);
@@ -30,9 +31,9 @@ class ProductShopCartResource extends JsonResource
                 'productible' => [
                     ...$this->resource->productible->toArray(),
                     'sale_price' => $finalPrice,
-                    ... $extraData
                 ]
-            ] : []
+            ] : [],
+            ... $extraData
         ];
     }
 }
