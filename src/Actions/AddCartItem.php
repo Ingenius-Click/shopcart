@@ -96,6 +96,11 @@ class AddCartItem
             return null;
         }
 
+        // Check if the product can be purchased
+        if (!$product->canBePurchased()) {
+            return null;
+        }
+
         // Check if product implements IInventoriable and has stock management
         if ($product instanceof IInventoriable && $product->handleStock()) {
             // Check if there's enough stock
