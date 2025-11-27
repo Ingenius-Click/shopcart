@@ -133,15 +133,14 @@ class ShopCart implements Arrayable, Jsonable
         $cartItems = $query->with('productible')->get();
 
         // Ensure all productibles implement IPurchasable
-        $this->cartItems = $cartItems->map(function ($cartItem) {
+        $this->cartItems = $cartItems->filter(function ($cartItem) {
             // Ensure the productible implements IPurchasable
             if (!($cartItem->productible instanceof IPurchasable)) {
                 throw new \InvalidArgumentException(
                     "Cart item productible must implement IPurchasable interface"
                 );
             }
-
-            return new ProductShopCartResource($cartItem);
+            return true;
         });
     }
 
@@ -259,12 +258,40 @@ class ShopCart implements Arrayable, Jsonable
 
     public function toArray(): array
     {
+        // Transform cart items using ProductShopCartResource (converts prices to current currency)
+        $transformedItems = $this->cartItems->map(function ($cartItem) {
+            return (new ProductShopCartResource($cartItem))->toArray(request());
+        })->toArray();
+
+        // Calculate amounts in base currency
+        $baseSubtotal = $this->calculateFinalSubtotal();
+        $baseTotal = $this->calculateTotal();
+        $cartDiscounts = $this->getCartDiscounts();
+        $extraCharges = $this->getCartExtraCharges();
+
+        // Convert cart-level discounts amounts
+        $convertedCartDiscounts = collect($cartDiscounts)->map(function ($discount) {
+            if (isset($discount['amount_saved'])) {
+                $discount['amount_saved'] = convert_currency($discount['amount_saved']);
+            }
+            return $discount;
+        })->toArray();
+
+        // Convert extra charges amounts
+        $convertedExtraCharges = collect($extraCharges)->map(function ($charge) {
+            if (isset($charge['amount'])) {
+                $charge['amount'] = convert_currency($charge['amount']);
+            }
+            return $charge;
+        })->toArray();
+
         $baseArray = [
-            'items' => $this->cartItems->toArray(),
-            'subtotal' => $this->calculateFinalSubtotal(),
-            'total' => $this->calculateTotal(),
-            'cart_discounts' => $this->getCartDiscounts(),
-            'extra_charges' => $this->getCartExtraCharges(),
+            'items' => $transformedItems,
+            'subtotal' => convert_currency($baseSubtotal),
+            'total' => convert_currency($baseTotal),
+            'cart_discounts' => $convertedCartDiscounts,
+            'extra_charges' => $convertedExtraCharges,
+            'currency' => get_currency_metadata(),
         ];
 
         // Run through all modifiers to extend the array

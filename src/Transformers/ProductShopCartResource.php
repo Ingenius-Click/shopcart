@@ -10,9 +10,14 @@ use Ingenius\Core\Services\PackageHookManager;
 
 class ProductShopCartResource extends JsonResource 
 {
-    public function toArray(Request $request): array 
+    public function toArray(Request $request): array
     {
         $finalPrice = $this->resource?->productible instanceof IPurchasable ? $this->resource->productible->getFinalPrice() : null;
+
+        // Convert price to current currency
+        if ($finalPrice) {
+            $finalPrice = convert_currency($finalPrice);
+        }
 
         // Apply product extensions
         $hookManager = App::make(PackageHookManager::class);
@@ -30,9 +35,11 @@ class ProductShopCartResource extends JsonResource
             ... $finalPrice ? [
                 'productible' => [
                     ...$this->resource->productible->toArray(),
+                    'regular_price' => convert_currency($this->resource->productible->getRegularPrice()),
                     'sale_price' => $finalPrice,
                 ]
             ] : [],
+            'currency' => get_currency_metadata(),
             ... $extraData
         ];
     }
