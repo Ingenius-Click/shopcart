@@ -6,6 +6,7 @@ use Illuminate\Contracts\Support\Arrayable;
 use Illuminate\Contracts\Support\Jsonable;
 use Illuminate\Support\Collection;
 use Ingenius\Core\Services\PackageHookManager;
+use Ingenius\Products\Services\ProductPriceCacheService;
 use Ingenius\ShopCart\Models\CartItem;
 use Illuminate\Support\Facades\Session;
 use Ingenius\Core\Interfaces\IPurchasable;
@@ -53,6 +54,25 @@ class ShopCart implements Arrayable, Jsonable
         $this->cartItems = collect();
         $this->loadCartItems();
         $this->hookManager = app(PackageHookManager::class);
+
+        // Warm price cache for all cart items after loading
+        $this->warmPriceCache();
+    }
+
+    /**
+     * Warm the price cache for all products in the cart
+     * This prevents N+1 queries when calculating prices
+     */
+    protected function warmPriceCache(): void
+    {
+        if ($this->cartItems->isEmpty()) {
+            return;
+        }
+
+        $priceCache = app(ProductPriceCacheService::class);
+        $products = $this->cartItems->map(fn($item) => $item->productible)->filter()->all();
+
+        $priceCache->warmBulkPrices($products);
     }
 
     /**
