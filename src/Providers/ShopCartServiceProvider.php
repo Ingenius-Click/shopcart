@@ -2,8 +2,10 @@
 
 namespace Ingenius\ShopCart\Providers;
 
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\ServiceProvider;
 use Ingenius\Core\Services\FeatureManager;
+use Ingenius\Core\Services\PackageHookManager;
 use Ingenius\Core\Traits\RegistersConfigurations;
 use Ingenius\Core\Traits\RegistersMigrations;
 use Ingenius\ShopCart\Features\AddToCartFeature;
@@ -49,6 +51,9 @@ class ShopCartServiceProvider extends ServiceProvider
             $manager->register(new RemoveFromCartFeature());
             $manager->register(new DeleteFromCartFeature());
         });
+
+        // Register user anonymization hooks
+        $this->registerUserAnonymizationHooks();
     }
 
     /**
@@ -84,5 +89,29 @@ class ShopCartServiceProvider extends ServiceProvider
                 ListCartModifiersCommand::class,
             ]);
         }
+    }
+
+    /**
+     * Register hooks for user anonymization
+     */
+    protected function registerUserAnonymizationHooks(): void
+    {
+        $this->app->afterResolving(PackageHookManager::class, function (PackageHookManager $manager) {
+            // Listen to user.before_anonymize hook to clean up cart items
+            $manager->register('user.before_anonymize', function ($data, $context) {
+                $userId = $context['user_id'] ?? null;
+                $userClass = $context['user_class'] ?? null;
+
+                if ($userId && $userClass) {
+                    // Delete all cart items owned by this user (polymorphic relationship)
+                    DB::table('cart_items')
+                        ->where('owner_type', $userClass)
+                        ->where('owner_id', $userId)
+                        ->delete();
+                }
+
+                return $data;
+            }, 10);
+        });
     }
 }
