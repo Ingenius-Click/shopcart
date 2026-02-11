@@ -335,7 +335,7 @@ class ShopCart implements Arrayable, Jsonable
         $productDiscounts = [];
 
         foreach ($this->cartItems as $cartItem) {
-            $itemArray = $cartItem->toArray(request());
+            $itemArray = (new ProductShopCartResource($cartItem))->toArray(request());
 
             if (!empty($itemArray['applied_discounts']['discounts'])) {
                 foreach ($itemArray['applied_discounts']['discounts'] as $discount) {
