@@ -3,7 +3,6 @@
 namespace Ingenius\ShopCart\Actions;
 
 use Illuminate\Support\Facades\Config;
-use Illuminate\Support\Facades\Session;
 use Ingenius\Auth\Helpers\AuthHelper;
 use Ingenius\Core\Interfaces\IPurchasable;
 use Ingenius\ShopCart\Models\CartItem;
@@ -31,9 +30,11 @@ class DeleteCartItem
             $query->where('owner_id', $user->id)
                 ->where('owner_type', get_class($user));
         } else {
-            // If user is not authenticated, search by session ID
-            $sessionId = Session::getId();
-            $query->where('session_id', $sessionId);
+            $guestToken = request()->header('X-Guest-Token');
+            if (!$guestToken) {
+                return false;
+            }
+            $query->where('guest_token', $guestToken);
         }
 
         // Try to find existing cart item

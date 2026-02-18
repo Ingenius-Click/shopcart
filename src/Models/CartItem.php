@@ -17,7 +17,7 @@ class CartItem extends Model
     protected $fillable = [
         'owner_id',
         'owner_type',
-        'session_id',
+        'guest_token',
         'productible_id',
         'productible_type',
         'quantity',

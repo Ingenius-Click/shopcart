@@ -3,7 +3,6 @@
 namespace Ingenius\ShopCart\Actions;
 
 use Illuminate\Support\Facades\Config;
-use Illuminate\Support\Facades\Session;
 use Ingenius\Auth\Helpers\AuthHelper;
 use Ingenius\Core\Interfaces\IInventoriable;
 use Ingenius\Core\Interfaces\IPurchasable;
@@ -30,21 +29,21 @@ class AddCartItem
             ->where('productible_id', $productible->getId())
             ->where('productible_type', get_class($productible));
 
+        $guestToken = $user ? null : request()->header('X-Guest-Token');
+
         if ($user) {
-            // If user is authenticated, search by owner
             $query->where('owner_id', $user->id)
                 ->where('owner_type', get_class($user));
+        } elseif ($guestToken) {
+            $query->where('guest_token', $guestToken);
         } else {
-            // If user is not authenticated, search by session ID
-            $sessionId = Session::getId();
-            $query->where('session_id', $sessionId);
+            throw new \RuntimeException('Cannot add to cart without an authenticated user or X-Guest-Token header.');
         }
 
         // Try to find existing cart item
         $cartItem = $query->first();
 
         if ($cartItem) {
-            // If cart item exists, update the quantity
             $cartItem->quantity += $quantity;
             $cartItem->save();
 
@@ -59,13 +58,10 @@ class AddCartItem
         ];
 
         if ($user) {
-            // For authenticated user
             $data['owner_id'] = $user->id;
             $data['owner_type'] = get_class($user);
-            $data['session_id'] = null;
         } else {
-            // For guest user with session
-            $data['session_id'] = Session::getId();
+            $data['guest_token'] = $guestToken;
         }
 
         return CartItem::create($data);

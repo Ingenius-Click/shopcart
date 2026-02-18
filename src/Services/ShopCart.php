@@ -7,7 +7,6 @@ use Illuminate\Contracts\Support\Jsonable;
 use Illuminate\Support\Collection;
 use Ingenius\Core\Services\PackageHookManager;
 use Ingenius\ShopCart\Models\CartItem;
-use Illuminate\Support\Facades\Session;
 use Ingenius\Core\Interfaces\IPurchasable;
 use Ingenius\Auth\Helpers\AuthHelper;
 use Ingenius\ShopCart\Transformers\ProductShopCartResource;
@@ -145,9 +144,11 @@ class ShopCart implements Arrayable, Jsonable
             $query->where('owner_id', $user->id)
                 ->where('owner_type', tenant_user_class());
         } else {
-            // If user is not authenticated, load items by session ID
-            $sessionId = Session::getId();
-            $query->where('session_id', $sessionId);
+            $guestToken = request()->header('X-Guest-Token');
+            if (!$guestToken) {
+                return;
+            }
+            $query->where('guest_token', $guestToken);
         }
 
         // Load items with their productible relationship
@@ -190,9 +191,11 @@ class ShopCart implements Arrayable, Jsonable
             $query->where('owner_id', $user->id)
                 ->where('owner_type', get_class($user));
         } else {
-            // If user is not authenticated, delete items by session ID
-            $sessionId = Session::getId();
-            $query->where('session_id', $sessionId);
+            $guestToken = request()->header('X-Guest-Token');
+            if (!$guestToken) {
+                return false;
+            }
+            $query->where('guest_token', $guestToken);
         }
 
         // Delete all matching cart items
