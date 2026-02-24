@@ -6,6 +6,7 @@ use Illuminate\Support\Facades\Config;
 use Ingenius\Auth\Helpers\AuthHelper;
 use Ingenius\Core\Interfaces\IInventoriable;
 use Ingenius\Core\Interfaces\IPurchasable;
+use Ingenius\Core\Interfaces\StockAvailabilityInterface;
 use Ingenius\ShopCart\Exceptions\InsufficientStockException;
 use Ingenius\ShopCart\Models\CartItem;
 
@@ -40,12 +41,17 @@ class AddCartItem
             throw new \RuntimeException('Cannot add to cart without an authenticated user or X-Guest-Token header.');
         }
 
+        $expiresAt = $this->getExpiresAt();
+
         // Try to find existing cart item
         $cartItem = $query->first();
 
         if ($cartItem) {
             $cartItem->quantity += $quantity;
+            $cartItem->expires_at = $expiresAt;
             $cartItem->save();
+
+            $this->invalidateStockCache($productible);
 
             return $cartItem;
         }
@@ -55,6 +61,7 @@ class AddCartItem
             'productible_id' => $productible->getId(),
             'productible_type' => get_class($productible),
             'quantity' => $quantity,
+            'expires_at' => $expiresAt,
         ];
 
         if ($user) {
@@ -64,7 +71,11 @@ class AddCartItem
             $data['guest_token'] = $guestToken;
         }
 
-        return CartItem::create($data);
+        $cartItem = CartItem::create($data);
+
+        $this->invalidateStockCache($productible);
+
+        return $cartItem;
     }
 
     /**
@@ -97,18 +108,63 @@ class AddCartItem
             return null;
         }
 
-        // Check if product implements IInventoriable and has stock management
+        // Check stock availability accounting for reservations in carts and orders
         if ($product instanceof IInventoriable && $product->handleStock()) {
-            // Check if there's enough stock
-            if (!$product->hasEnoughStock($quantity)) {
-                throw new InsufficientStockException(
-                    $productId,
-                    $quantity,
-                    $product->getStock()
-                );
+            $stockService = $this->resolveStockService();
+
+            if ($stockService) {
+                $available = $stockService->getAvailableStock($product);
+
+                if ($available !== null && $available < $quantity) {
+                    throw new InsufficientStockException(
+                        $productId,
+                        $quantity,
+                        $available
+                    );
+                }
             }
         }
 
         return $this->handle($product, $quantity);
+    }
+
+    /**
+     * Get the expiration timestamp for a cart item based on config.
+     */
+    protected function getExpiresAt(): ?\Carbon\Carbon
+    {
+        $ttl = Config::get('shopcart.cart_item_ttl');
+
+        if ($ttl === null) {
+            return null;
+        }
+
+        $ttl = (int) $ttl;
+
+        return now()->addMinutes($ttl);
+    }
+
+    /**
+     * Invalidate the stock availability cache for the given product.
+     */
+    protected function invalidateStockCache(IPurchasable $productible): void
+    {
+        if ($productible instanceof IInventoriable && $productible->handleStock()) {
+            $stockService = $this->resolveStockService();
+            $stockService?->invalidateCache(get_class($productible), $productible->getId());
+        }
+    }
+
+    /**
+     * Resolve the stock availability service from the container.
+     * Returns null if no implementation is bound (products package not installed).
+     */
+    protected function resolveStockService(): ?StockAvailabilityInterface
+    {
+        if (app()->bound(StockAvailabilityInterface::class)) {
+            return app(StockAvailabilityInterface::class);
+        }
+
+        return null;
     }
 }

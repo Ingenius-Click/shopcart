@@ -6,13 +6,16 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\ServiceProvider;
 use Ingenius\Core\Services\FeatureManager;
 use Ingenius\Core\Services\PackageHookManager;
+use Ingenius\Core\Services\ScheduledTaskManager;
 use Ingenius\Core\Traits\RegistersConfigurations;
 use Ingenius\Core\Traits\RegistersMigrations;
+use Ingenius\ShopCart\Console\Tasks\ClearExpiredCartItemsTask;
 use Ingenius\ShopCart\Features\AddToCartFeature;
 use Ingenius\ShopCart\Features\DeleteFromCartFeature;
 use Ingenius\ShopCart\Features\GetCartFeature;
 use Ingenius\ShopCart\Features\GetCartItemsFeature;
 use Ingenius\ShopCart\Features\RemoveFromCartFeature;
+use Ingenius\ShopCart\Models\CartItem;
 use Ingenius\ShopCart\Services\ShopCart;
 use Ingenius\ShopCart\Services\CartModifierManager;
 use Ingenius\ShopCart\Console\ListCartModifiersCommand;
@@ -52,6 +55,12 @@ class ShopCartServiceProvider extends ServiceProvider
             $manager->register(new DeleteFromCartFeature());
         });
 
+        // Register stock reservation hook
+        $this->registerStockReservationHook();
+
+        // Register scheduled tasks
+        $this->registerScheduledTasks();
+
         // Register user anonymization hooks
         $this->registerUserAnonymizationHooks();
     }
@@ -89,6 +98,34 @@ class ShopCartServiceProvider extends ServiceProvider
                 ListCartModifiersCommand::class,
             ]);
         }
+    }
+
+    /**
+     * Register hook to provide cart reservation counts for stock availability
+     */
+    protected function registerStockReservationHook(): void
+    {
+        $this->app->afterResolving(PackageHookManager::class, function (PackageHookManager $manager) {
+            $manager->register('stock.reservations.get', function ($reservedSoFar, $context) {
+                $reserved = CartItem::query()
+                    ->where('productible_id', $context['productible_id'])
+                    ->where('productible_type', $context['productible_type'])
+                    ->notExpired()
+                    ->sum('quantity');
+
+                return $reservedSoFar + $reserved;
+            }, 10);
+        });
+    }
+
+    /**
+     * Register scheduled tasks for the shopcart package
+     */
+    protected function registerScheduledTasks(): void
+    {
+        $this->app->afterResolving(ScheduledTaskManager::class, function (ScheduledTaskManager $manager) {
+            $manager->register($this->app->make(ClearExpiredCartItemsTask::class));
+        });
     }
 
     /**

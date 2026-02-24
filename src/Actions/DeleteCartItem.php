@@ -4,7 +4,9 @@ namespace Ingenius\ShopCart\Actions;
 
 use Illuminate\Support\Facades\Config;
 use Ingenius\Auth\Helpers\AuthHelper;
+use Ingenius\Core\Interfaces\IInventoriable;
 use Ingenius\Core\Interfaces\IPurchasable;
+use Ingenius\Core\Interfaces\StockAvailabilityInterface;
 use Ingenius\ShopCart\Models\CartItem;
 
 class DeleteCartItem
@@ -46,7 +48,13 @@ class DeleteCartItem
         }
 
         // Delete the cart item completely
-        return (bool) $cartItem->delete();
+        $deleted = (bool) $cartItem->delete();
+
+        if ($deleted) {
+            $this->invalidateStockCache($productible);
+        }
+
+        return $deleted;
     }
 
     /**
@@ -73,5 +81,18 @@ class DeleteCartItem
         }
 
         return $this->handle($product);
+    }
+
+    /**
+     * Invalidate the stock availability cache for the given product.
+     */
+    protected function invalidateStockCache(IPurchasable $productible): void
+    {
+        if ($productible instanceof IInventoriable && $productible->handleStock()) {
+            if (app()->bound(StockAvailabilityInterface::class)) {
+                app(StockAvailabilityInterface::class)
+                    ->invalidateCache(get_class($productible), $productible->getId());
+            }
+        }
     }
 }
