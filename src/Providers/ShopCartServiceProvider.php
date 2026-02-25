@@ -107,11 +107,23 @@ class ShopCartServiceProvider extends ServiceProvider
     {
         $this->app->afterResolving(PackageHookManager::class, function (PackageHookManager $manager) {
             $manager->register('stock.reservations.get', function ($reservedSoFar, $context) {
-                $reserved = CartItem::query()
+                $query = CartItem::query()
                     ->where('productible_id', $context['productible_id'])
                     ->where('productible_type', $context['productible_type'])
-                    ->notExpired()
-                    ->sum('quantity');
+                    ->notExpired();
+
+                // When converting a cart to an order, exclude the ordering user's own
+                // cart items so their reservation does not block their own order creation.
+                if (!empty($context['exclude_cart_owner_id']) && !empty($context['exclude_cart_owner_type'])) {
+                    $query->whereNot(function ($q) use ($context) {
+                        $q->where('owner_id', $context['exclude_cart_owner_id'])
+                          ->where('owner_type', $context['exclude_cart_owner_type']);
+                    });
+                } elseif (!empty($context['exclude_cart_guest_token'])) {
+                    $query->where('guest_token', '!=', $context['exclude_cart_guest_token']);
+                }
+
+                $reserved = $query->sum('quantity');
 
                 return $reservedSoFar + $reserved;
             }, 10);
