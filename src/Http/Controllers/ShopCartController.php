@@ -28,13 +28,16 @@ class ShopCartController extends Controller
         // Request is already validated via AddCartItemRequest
         $validated = $request->validated();
 
-        // Get the product ID and quantity
-        $productId = $validated['product_id'];
         $quantity = $validated['quantity'];
 
         try {
-            // Add to cart using the action
-            $cartItem = $action->addProduct($productId, $quantity);
+            // Add variant or product to cart
+            if (!empty($validated['variant_id'])) {
+                $cartItem = $action->addVariant($validated['variant_id'], $quantity);
+            } else {
+                $productId = $validated['product_id'];
+                $cartItem = $action->addProduct($productId, $quantity);
+            }
 
             if (!$cartItem) {
                 return response()->json([

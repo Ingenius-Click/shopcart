@@ -26,13 +26,13 @@ class ProductShopCartResource extends JsonResource
             'product_id' => $this->resource->productible->id,
             'product_class' => get_class($this->resource->productible),
             'quantity' => $this->resource->quantity,
-            'base_price' => $this->resource->productible->sale_price,
-            'regular_price' => $this->resource->productible->getRegularPrice(),
+            'base_price' => method_exists($this->resource->productible, 'getEffectiveSalePrice') ? $this->resource->productible->getEffectiveSalePrice() : $this->resource->productible->sale_price,
+            'regular_price' => method_exists($this->resource->productible, 'getRegularPrice') ? $this->resource->productible->getRegularPrice() : $this->resource->productible->regular_price,
         ]);
 
         return [
             ... $this->resource->toArray(),
-            ... $finalPrice ? [
+            ... $finalPrice !== null ? [
                 'productible' => [
                     ...$this->resource->productible->toArray(),
                     'regular_price' => convert_currency($this->resource->productible->getRegularPrice()),

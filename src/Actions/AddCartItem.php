@@ -129,6 +129,51 @@ class AddCartItem
     }
 
     /**
+     * Add a product variant to the cart
+     *
+     * @param int $variantId The ID of the product variant to add
+     * @param int $quantity The quantity to add
+     * @return CartItem|null The created or updated cart item, or null if variant not found
+     * @throws InsufficientStockException When there is not enough stock
+     */
+    public function addVariant(int $variantId, int $quantity = 1): ?CartItem
+    {
+        $variantModelClass = Config::get('shopcart.variant_model', 'Ingenius\Products\Models\ProductVariant');
+
+        if (!class_exists($variantModelClass)) {
+            return null;
+        }
+
+        $variant = $variantModelClass::find($variantId);
+
+        if (!$variant || !($variant instanceof IPurchasable)) {
+            return null;
+        }
+
+        if (!$variant->canBePurchased()) {
+            return null;
+        }
+
+        if ($variant instanceof IInventoriable && $variant->handleStock()) {
+            $stockService = $this->resolveStockService();
+
+            if ($stockService) {
+                $available = $stockService->getAvailableStock($variant);
+
+                if ($available !== null && $available < $quantity) {
+                    throw new InsufficientStockException(
+                        $variantId,
+                        $quantity,
+                        $available
+                    );
+                }
+            }
+        }
+
+        return $this->handle($variant, $quantity);
+    }
+
+    /**
      * Get the expiration timestamp for a cart item based on config.
      */
     protected function getExpiresAt(): ?\Carbon\Carbon
