@@ -12,7 +12,7 @@ class DeleteCartItemRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'product_id' => ['required', 'integer'],
+            'cart_item_id' => ['required', 'integer'],
         ];
     }
 

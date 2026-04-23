@@ -4,8 +4,8 @@ namespace Ingenius\ShopCart\Http\Requests;
 
 use Illuminate\Foundation\Http\FormRequest;
 
-class RemoveCartItemRequest extends FormRequest
-{
+class UpdateCartItemRequest extends FormRequest {
+
     /**
      * Get the validation rules that apply to the request.
      */
@@ -13,7 +13,7 @@ class RemoveCartItemRequest extends FormRequest
     {
         return [
             'cart_item_id' => ['required', 'integer'],
-            'quantity' => ['required', 'integer', 'min:1'],
+            'quantity' => ['required', 'integer', 'min:0'],
         ];
     }
 
@@ -24,4 +24,5 @@ class RemoveCartItemRequest extends FormRequest
     {
         return true;
     }
+
 }

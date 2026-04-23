@@ -8,10 +8,12 @@ use Illuminate\Http\Request;
 use Ingenius\ShopCart\Actions\AddCartItem;
 use Ingenius\ShopCart\Actions\DeleteCartItem;
 use Ingenius\ShopCart\Actions\RemoveCartItem;
+use Ingenius\ShopCart\Actions\UpdateCartItem;
 use Ingenius\ShopCart\Exceptions\InsufficientStockException;
 use Ingenius\ShopCart\Http\Requests\AddCartItemRequest;
 use Ingenius\ShopCart\Http\Requests\DeleteCartItemRequest;
 use Ingenius\ShopCart\Http\Requests\RemoveCartItemRequest;
+use Ingenius\ShopCart\Http\Requests\UpdateCartItemRequest;
 use Ingenius\ShopCart\Services\ShopCart;
 
 class ShopCartController extends Controller
@@ -107,11 +109,11 @@ class ShopCartController extends Controller
         $validated = $request->validated();
 
         // Get the product ID and quantity
-        $productId = $validated['product_id'];
+        $cartItemId = $validated['cart_item_id'];
         $quantity = $validated['quantity'];
 
         // Remove from cart using the action
-        $cartItem = $action->removeProduct($productId, $quantity);
+        $cartItem = $action->removeCartItemById($cartItemId, $quantity);
 
         if ($cartItem === null) {
             return response()->json([
@@ -122,6 +124,29 @@ class ShopCartController extends Controller
 
         return response()->json([
             'message' => 'Product quantity updated in cart',
+            'data' => $cartItem
+        ], 200);
+    }
+
+    public function updateCartItemQuantity(UpdateCartItemRequest $request, UpdateCartItem $action): JsonResponse
+    {
+        $validated = $request->validated();
+
+        // Get the product ID
+        $cartItemId = $validated['cart_item_id'];
+        $quantity = $validated['quantity'];
+
+        $cartItem = $action->handle($cartItemId, $quantity);
+
+        if (!$cartItem) {
+            return response()->json([
+                'message' => 'Cart item not found or insufficient stock',
+                'data' => null
+            ], 404);
+        }
+
+        return response()->json([
+            'message' => 'Cart item quantity updated successfully',
             'data' => $cartItem
         ], 200);
     }
@@ -139,10 +164,10 @@ class ShopCartController extends Controller
         $validated = $request->validated();
 
         // Get the product ID
-        $productId = $validated['product_id'];
+        $cartItemId = $validated['cart_item_id'];
 
         // Delete from cart using the action
-        $success = $action->deleteProduct($productId);
+        $success = $action->handle($cartItemId);
 
         if (!$success) {
             return response()->json([

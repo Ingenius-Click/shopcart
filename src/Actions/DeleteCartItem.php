@@ -2,9 +2,7 @@
 
 namespace Ingenius\ShopCart\Actions;
 
-use Illuminate\Support\Facades\Config;
 use Ingenius\Auth\Helpers\AuthHelper;
-use Ingenius\Core\Interfaces\IInventoriable;
 use Ingenius\Core\Interfaces\IPurchasable;
 use Ingenius\Core\Interfaces\StockAvailabilityInterface;
 use Ingenius\ShopCart\Models\CartItem;
@@ -14,18 +12,18 @@ class DeleteCartItem
     /**
      * Delete a cart item completely
      *
-     * @param IPurchasable $productible The polymorphic product model
+     * @param int $cartItemId The cart item to delete
      * @return bool Whether the deletion was successful
      */
-    public function handle(IPurchasable $productible): bool
+    public function handle(int $cartItemId): bool
     {
         // Get the authenticated user or null if not authenticated
         $user = AuthHelper::getUser();
 
         // Set up the query to find an existing cart item
         $query = CartItem::query()
-            ->where('productible_id', $productible->getId())
-            ->where('productible_type', get_class($productible));
+            ->where('id', $cartItemId)
+            ;
 
         if ($user) {
             // If user is authenticated, search by owner
@@ -47,40 +45,31 @@ class DeleteCartItem
             return false;
         }
 
+        if(!$this->checkProductible($cartItem->productible)) {
+            // Productible is not valid, just delete the cart item
+            return false;
+        }
+
         // Delete the cart item completely
         $deleted = (bool) $cartItem->delete();
 
         if ($deleted) {
-            $this->invalidateStockCache($productible);
+            $this->invalidateStockCache($cartItem->productible);
         }
 
         return $deleted;
     }
 
-    /**
-     * Delete a cart item completely using the product ID
-     *
-     * @param int $productId The ID of the product to delete from cart
-     * @return bool Whether the deletion was successful
-     */
-    public function deleteProduct(int $productId): bool
-    {
-        // Get the product model class from config
-        $productModelClass = Config::get('shopcart.product_model', 'Modules\Products\Models\Product');
-
-        // Check if the product model class exists
-        if (!class_exists($productModelClass)) {
+    public function checkProductible($productible): bool {
+        if(!$productible || !($productible instanceof IPurchasable)) {
             return false;
         }
 
-        // Find the product
-        $product = $productModelClass::find($productId);
-
-        if (!$product || !($product instanceof IPurchasable)) {
+        if(!$productible->canBePurchased()) {
             return false;
         }
 
-        return $this->handle($product);
+        return true;
     }
 
     /**

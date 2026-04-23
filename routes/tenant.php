@@ -24,6 +24,9 @@ Route::middleware([
     Route::get('/cart/items', [ShopCartController::class, 'getCartItems'])
         ->name('shopcart.get.items')
         ->middleware('tenant.has.feature:get-cart-items');
+    Route::put('/cart/update', [ShopCartController::class, 'updateCartItemQuantity'])
+        ->name('shopcart.update.product')
+        ->middleware(['tenant.has.feature:remove-from-cart', 'tenant.has.feature:add-to-cart']);
     Route::get('/cart', [ShopCartController::class, 'getShopCart'])
         ->name('shopcart.get.cart')
         ->middleware('tenant.has.feature:get-cart');
