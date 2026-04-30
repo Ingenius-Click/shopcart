@@ -63,6 +63,8 @@ class ShopCartServiceProvider extends ServiceProvider
 
         // Register user anonymization hooks
         $this->registerUserAnonymizationHooks();
+
+        $this->registerMergeCartOnLoginHook();
     }
 
     /**
@@ -157,6 +159,25 @@ class ShopCartServiceProvider extends ServiceProvider
                         ->where('owner_type', $userClass)
                         ->where('owner_id', $userId)
                         ->delete();
+                }
+
+                return $data;
+            }, 10);
+        });
+    }
+
+    protected function registerMergeCartOnLoginHook(): void
+    {
+        $this->app->afterResolving(PackageHookManager::class, function (PackageHookManager $manager) {
+            $manager->register('auth.login', function ($data, $context) {
+                $userId = $context['user_id'] ?? null;
+                $userClass = $context['user_class'] ?? null;
+                $guestToken = $context['guest_token'] ?? null;
+
+                if ($userId && $userClass && $guestToken) {
+                    // Merge cart items from guest to user
+                    $mergeService = app()->make(\Ingenius\ShopCart\Actions\MergeCartItems::class);
+                    $mergeService->handle($guestToken, $userId, $userClass);
                 }
 
                 return $data;
