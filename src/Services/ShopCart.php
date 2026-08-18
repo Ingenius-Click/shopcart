@@ -5,6 +5,7 @@ namespace Ingenius\ShopCart\Services;
 use Illuminate\Contracts\Support\Arrayable;
 use Illuminate\Contracts\Support\Jsonable;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Config;
 use Ingenius\Core\Services\PackageHookManager;
 use Ingenius\ShopCart\Models\CartItem;
 use Ingenius\Core\Interfaces\IPurchasable;
@@ -205,6 +206,69 @@ class ShopCart implements Arrayable, Jsonable
         $this->cartItems = collect();
 
         return $result > 0;
+    }
+
+    /**
+     * Put items back into the current owner's cart.
+     *
+     * Used to undo a clearCart() when the checkout that triggered it could not
+     * be completed. Items are described as plain arrays so callers do not need
+     * to know about this package's models.
+     *
+     * @param array $items Each entry needs productible_type, productible_id and quantity
+     * @return bool Whether anything was restored
+     */
+    public function restoreItems(array $items): bool
+    {
+        $user = AuthHelper::getUser();
+        $guestToken = $user ? null : request()->header('X-Guest-Token');
+
+        if (!$user && !$guestToken) {
+            return false;
+        }
+
+        $expiresAt = Config::get('shopcart.cart_item_ttl') !== null
+            ? now()->addMinutes((int) Config::get('shopcart.cart_item_ttl'))
+            : null;
+
+        $restored = 0;
+
+        foreach ($items as $item) {
+            $productibleType = $item['productible_type'] ?? null;
+            $productibleId = $item['productible_id'] ?? null;
+            $quantity = (int) ($item['quantity'] ?? 0);
+
+            if (!$productibleType || !$productibleId || $quantity < 1) {
+                continue;
+            }
+
+            $attributes = [
+                'productible_type' => $productibleType,
+                'productible_id' => $productibleId,
+            ];
+
+            if ($user) {
+                $attributes['owner_id'] = $user->id;
+                $attributes['owner_type'] = get_class($user);
+            } else {
+                $attributes['guest_token'] = $guestToken;
+            }
+
+            // updateOrCreate rather than create: the customer may have added the
+            // same product again while the checkout was in flight.
+            CartItem::updateOrCreate($attributes, [
+                'quantity' => $quantity,
+                'expires_at' => $expiresAt,
+            ]);
+
+            $restored++;
+        }
+
+        if ($restored > 0) {
+            $this->loadCartItems();
+        }
+
+        return $restored > 0;
     }
 
     /**
